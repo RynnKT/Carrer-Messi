@@ -203,6 +203,43 @@ def inject_global_css():
       [data-testid="stDataFrame"] {{
           border: 1px solid {BORDER}; border-radius: 16px; overflow: hidden;
       }}
+
+      /* Filter widgets styling (Selectboxes, Multiselects, Listboxes) */
+      div[data-baseweb="select"] > div {{
+          background-color: #11111A !important;
+          border-color: rgba(244,63,94,0.25) !important;
+          color: #F4F4F5 !important;
+          border-radius: 10px !important;
+      }}
+      div[data-baseweb="select"] input {{
+          color: #F4F4F5 !important;
+      }}
+      ul[role="listbox"] {{
+          background-color: #11111A !important;
+          border: 1px solid rgba(244,63,94,0.25) !important;
+          border-radius: 12px !important;
+      }}
+      li[role="option"] {{
+          background-color: #11111A !important;
+          color: #F4F4F5 !important;
+      }}
+      li[role="option"]:hover {{
+          background-color: rgba(244,63,94,0.12) !important;
+          color: #F4F4F5 !important;
+      }}
+      li[role="option"][aria-selected="true"] {{
+          background-color: rgba(244,63,94,0.18) !important;
+          color: #F4F4F5 !important;
+      }}
+      span[data-baseweb="tag"] {{
+          background-color: rgba(244,63,94,0.15) !important;
+          color: #F4F4F5 !important;
+          border: 1px solid rgba(244,63,94,0.40) !important;
+          border-radius: 6px !important;
+      }}
+      span[data-baseweb="tag"] span[data-baseweb="tag-action"] svg path {{
+          fill: {ROSE} !important;
+      }}
     
       /* Divider */
       hr {{ border: none; height: 1px; background: linear-gradient(90deg, transparent, {BORDER}, transparent); margin: 28px 0; }}
@@ -307,11 +344,15 @@ def render_sidebar(df: pd.DataFrame) -> pd.DataFrame:
         seasons = sorted(df["season"].unique())
         clubs   = sorted(df["club"].unique())
         comps   = sorted(df["competition"].unique())
+        goal_types = sorted(df["goal_type"].unique())
+        positions  = sorted(df["player_position"].unique())
 
         # Widget pilihan filter interaktif
         sel_seasons = st.multiselect("Season", seasons, default=seasons)
         sel_clubs   = st.multiselect("Club", clubs, default=clubs)
         sel_comps   = st.multiselect("Competition", comps, default=comps)
+        sel_goal_types = st.multiselect("Goal Type", goal_types, default=goal_types)
+        sel_positions  = st.multiselect("Player Position", positions, default=positions)
         sel_venue   = st.radio("Venue", ["All", "Home", "Away"], horizontal=True)
 
         st.markdown("---")
@@ -327,6 +368,8 @@ def render_sidebar(df: pd.DataFrame) -> pd.DataFrame:
         df["season"].isin(sel_seasons)
         & df["club"].isin(sel_clubs)
         & df["competition"].isin(sel_comps)
+        & df["goal_type"].isin(sel_goal_types)
+        & df["player_position"].isin(sel_positions)
     )
     if sel_venue != "All":
         mask &= df["venue"] == sel_venue
@@ -375,121 +418,152 @@ def render_kpis(d: pd.DataFrame):
                 unsafe_allow_html=True,
             )
 
-def render_seasons_and_clubs(d: pd.DataFrame):
+def render_seasons(d: pd.DataFrame):
     """
-    Bagian 1: Visualisasi Tren Gol per Musim (Line Spline Chart) 
-    dan Distribusi Gol berdasarkan Klub (Horizontal Bar Chart).
+    Bagian 1: Visualisasi Tren Gol per Musim (Line Spline Chart).
     """
     render_section_header("01", "Goals across the seasons")
-    left, right = st.columns([2, 1])
+    # Menghitung agregat gol per musim dan klub untuk grafik deret waktu
+    s = d.groupby(["season", "club"]).size().reset_index(name="goals").sort_values("season")
+    fig = px.line(
+        s, x="season", y="goals", color="club", line_shape="spline",
+        color_discrete_map={
+            "FC Barcelona": "#5C7CFA",
+            "Inter Miami CF": "#FF6B6B",
+            "Paris Saint-Germain": "#20C997",
+            "Argentina": "#22D3EE"
+        }
+    )
+    fig.update_traces(mode="lines+markers", marker=dict(size=6))
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.plotly_chart(style_fig(fig, 360, showlegend=True), use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    with left:
-        # Menghitung agregat gol per musim untuk grafik deret waktu
-        s = d.groupby("season").size().reset_index(name="goals").sort_values("season")
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=s["season"], y=s["goals"], mode="lines",
-            line=dict(color=ROSE, width=3, shape="spline"),
-            fill="tozeroy",
-            fillcolor="rgba(244,63,94,0.12)",
-            hovertemplate="<b>%{x}</b><br>%{y} goals<extra></extra>",
-        ))
-        fig.add_trace(go.Scatter(
-            x=s["season"], y=s["goals"], mode="markers",
-            marker=dict(color=AMBER, size=8, line=dict(color=INK, width=2)),
-            hoverinfo="skip",
-        ))
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.plotly_chart(style_fig(fig, 360), use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with right:
-        # Menghitung jumlah gol untuk setiap klub yang dibela
-        cl = d["club"].value_counts().reset_index()
-        cl.columns = ["club", "goals"]
-        fig = px.bar(cl, x="goals", y="club", orientation="h",
-                     color="goals", color_continuous_scale=SEQ, text="goals")
-        fig.update_traces(texttemplate="%{text}", textposition="outside",
-                          textfont=dict(color=TEXT, size=11),
-                          marker_line_width=0)
-        fig.update_layout(coloraxis_showscale=False, yaxis=dict(autorange="reversed"))
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.plotly_chart(style_fig(fig, 360), use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-def render_goal_anatomy(d: pd.DataFrame):
+def render_clubs(d: pd.DataFrame):
     """
-    Bagian 2: Visualisasi Metode Pencetakan Gol (Tipe Gol) dan Rentang Waktu (Minute Buckets).
+    Bagian 2: Distribusi Gol berdasarkan Klub (Horizontal Bar Chart).
     """
-    render_section_header("02", "The anatomy of a goal")
-    left, right = st.columns(2)
+    render_section_header("02", "Goals by club")
+    # Menghitung jumlah gol untuk setiap klub yang dibela, dikelompokkan berdasarkan venue
+    cl = d.groupby(["club", "venue"]).size().reset_index(name="goals")
+    # Urutkan agar klub dengan gol terbanyak muncul di atas (FC Barcelona)
+    club_totals = cl.groupby("club")["goals"].sum().reset_index().sort_values("goals", ascending=False)
+    cl["club"] = pd.Categorical(cl["club"], categories=club_totals["club"], ordered=True)
+    cl = cl.sort_values("club")
 
-    with left:
-        # 8 Tipe gol terbanyak
-        gt = d["goal_type"].value_counts().head(8).reset_index()
-        gt.columns = ["goal_type", "count"]
-        fig = px.bar(gt, x="count", y="goal_type", orientation="h",
-                     color="count", color_continuous_scale=SEQ, text="count")
-        fig.update_traces(texttemplate="%{text}", textposition="outside",
-                          textfont=dict(color=TEXT, size=11), marker_line_width=0)
-        fig.update_layout(coloraxis_showscale=False, yaxis=dict(autorange="reversed"))
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.plotly_chart(style_fig(fig, 380), use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+    fig = px.bar(
+        cl, x="goals", y="club", orientation="h",
+        color="venue",
+        color_discrete_map={"Home": ROSE, "Away": CYAN},
+        text="goals"
+    )
+    fig.update_traces(texttemplate="%{text}", textposition="outside",
+                      textfont=dict(color=TEXT, size=11),
+                      marker_line_width=0)
+    fig.update_layout(yaxis=dict(autorange="reversed"))
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.plotly_chart(style_fig(fig, 360, showlegend=True), use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    with right:
-        # Pengelompokan menit gol berdasarkan interval 15 menit
-        bucket_order = ["0-15","16-30","31-45","46-60","61-75","76-90","91+"]
-        mb = d["goal_minute_bucket"].value_counts().reindex(bucket_order, fill_value=0).reset_index()
-        mb.columns = ["bucket", "count"]
-        fig = px.bar(mb, x="bucket", y="count",
-                     color="count", color_continuous_scale=SEQ, text="count")
-        fig.update_traces(texttemplate="%{text}", textposition="outside",
-                          textfont=dict(color=TEXT, size=11), marker_line_width=0)
-        fig.update_layout(coloraxis_showscale=False)
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.plotly_chart(style_fig(fig, 380), use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-def render_geography_and_rhythm(d: pd.DataFrame, total_goals_filtered: int):
+def render_goal_types(d: pd.DataFrame):
     """
-    Bagian 3: Visualisasi Distribusi Laga Home/Away dan Proporsi Posisi Bermain Messi.
+    Bagian 3: Visualisasi Metode Pencetakan Gol (Tipe Gol).
     """
-    render_section_header("03", "Geography & rhythm")
-    left, right = st.columns(2)
+    render_section_header("03", "Goal type distribution")
+    # Tentukan 8 tipe gol terbanyak secara keseluruhan
+    top_types = d["goal_type"].value_counts().head(8).index
+    # Saring data hanya untuk tipe gol tersebut
+    gt_filtered = d[d["goal_type"].isin(top_types)]
+    # Group by goal_type dan club
+    gt = gt_filtered.groupby(["goal_type", "club"]).size().reset_index(name="count")
+    
+    # Urutkan tipe gol agar total terbanyak ada di atas
+    type_totals = gt.groupby("goal_type")["count"].sum().reset_index().sort_values("count", ascending=False)
+    gt["goal_type"] = pd.Categorical(gt["goal_type"], categories=type_totals["goal_type"], ordered=True)
+    gt = gt.sort_values("goal_type")
 
-    with left:
-        # Pembagian gol kandang (Home) vs tandang (Away) per musim
-        ven = d.groupby(["season", "venue"]).size().reset_index(name="goals")
-        fig = px.bar(ven, x="season", y="goals", color="venue", barmode="group",
-                     color_discrete_map={"Home": ROSE, "Away": CYAN})
-        fig.update_traces(marker_line_width=0)
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.plotly_chart(style_fig(fig, 360, showlegend=True), use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+    fig = px.bar(
+        gt, x="count", y="goal_type", orientation="h",
+        color="club",
+        color_discrete_map={
+            "FC Barcelona": "#5C7CFA",
+            "Inter Miami CF": "#FF6B6B",
+            "Paris Saint-Germain": "#20C997",
+            "Argentina": "#22D3EE"
+        },
+        text="count"
+    )
+    fig.update_traces(texttemplate="%{text}", textposition="outside",
+                      textfont=dict(color=TEXT, size=11), marker_line_width=0)
+    fig.update_layout(yaxis=dict(autorange="reversed"))
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.plotly_chart(style_fig(fig, 380, showlegend=True), use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    with right:
-        # Donut Chart untuk persentase gol berdasarkan posisi pemain di lapangan
-        pos = d["player_position"].value_counts().reset_index()
-        pos.columns = ["position", "goals"]
-        fig = go.Figure(go.Pie(
-            labels=pos["position"], values=pos["goals"], hole=0.65,
-            marker=dict(colors=CATEGORICAL, line=dict(color=INK, width=2)),
-            textinfo="label+percent", textfont=dict(color=TEXT, family=FONT, size=12),
-            hovertemplate="<b>%{label}</b><br>%{value} goals (%{percent})<extra></extra>",
-        ))
-        # Menambahkan angka statistik di pusat lubang Donut Chart
-        fig.add_annotation(text=f"<b>{total_goals_filtered}</b><br><span style='font-size:11px;color:{MUTED}'>goals</span>",
-                           showarrow=False, font=dict(color=TEXT, family=FONT, size=22))
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.plotly_chart(style_fig(fig, 360, showlegend=False), use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+def render_goal_minutes(d: pd.DataFrame):
+    """
+    Bagian 4: Visualisasi Rentang Waktu (Minute Buckets).
+    """
+    render_section_header("04", "Goal timing / minute bucket")
+    # Pengelompokan menit gol berdasarkan interval 15 menit dan venue
+    mb = d.groupby(["goal_minute_bucket", "venue"]).size().reset_index(name="count")
+    bucket_order = ["0-15","16-30","31-45","46-60","61-75","76-90","91+"]
+    mb["goal_minute_bucket"] = pd.Categorical(mb["goal_minute_bucket"], categories=bucket_order, ordered=True)
+    mb = mb.sort_values("goal_minute_bucket")
+
+    fig = px.bar(
+        mb, x="goal_minute_bucket", y="count",
+        color="venue",
+        color_discrete_map={"Home": ROSE, "Away": CYAN},
+        text="count"
+    )
+    fig.update_traces(texttemplate="%{text}", textposition="outside",
+                      textfont=dict(color=TEXT, size=11), marker_line_width=0)
+    fig.update_layout(coloraxis_showscale=False)
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.plotly_chart(style_fig(fig, 380, showlegend=True), use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+def render_geography(d: pd.DataFrame):
+    """
+    Bagian 5: Visualisasi Distribusi Laga Home/Away per Musim.
+    """
+    render_section_header("05", "Venue comparison (Home vs Away)")
+    # Pembagian gol kandang (Home) vs tandang (Away) per musim
+    ven = d.groupby(["season", "venue"]).size().reset_index(name="goals")
+    fig = px.bar(ven, x="season", y="goals", color="venue", barmode="group",
+                 color_discrete_map={"Home": ROSE, "Away": CYAN})
+    fig.update_traces(marker_line_width=0)
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.plotly_chart(style_fig(fig, 360, showlegend=True), use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+def render_rhythm(d: pd.DataFrame, total_goals_filtered: int):
+    """
+    Bagian 6: Proporsi Posisi Bermain Messi.
+    """
+    render_section_header("06", "Goals by player position")
+    # Donut Chart untuk persentase gol berdasarkan posisi pemain di lapangan
+    pos = d["player_position"].value_counts().reset_index()
+    pos.columns = ["position", "goals"]
+    fig = go.Figure(go.Pie(
+        labels=pos["position"], values=pos["goals"], hole=0.65,
+        marker=dict(colors=CATEGORICAL, line=dict(color=INK, width=2)),
+        textinfo="label+percent", textfont=dict(color=TEXT, family=FONT, size=12),
+        hovertemplate="<b>%{label}</b><br>%{value} goals (%{percent})<extra></extra>",
+    ))
+    # Menambahkan angka statistik di pusat lubang Donut Chart
+    fig.add_annotation(text=f"<b>{total_goals_filtered}</b><br><span style='font-size:11px;color:{MUTED}'>goals</span>",
+                       showarrow=False, font=dict(color=TEXT, family=FONT, size=22))
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.plotly_chart(style_fig(fig, 360, showlegend=False), use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 def render_season_minute_heatmap(d: pd.DataFrame):
     """
-    Bagian 4: Heatmap Kerapatan Gol berdasarkan Persilangan Musim x Menit Pertandingan.
+    Bagian 7: Heatmap Kerapatan Gol berdasarkan Persilangan Musim x Menit Pertandingan.
     """
-    render_section_header("04", "The heatmap — season × minute")
+    render_section_header("07", "The heatmap — season × minute")
     
     # Pivot tabel gol untuk mendistribusikan jumlah gol ke baris Musim dan kolom Menit
     hm = (d.groupby(["season", "goal_minute_bucket"]).size()
@@ -512,29 +586,52 @@ def render_season_minute_heatmap(d: pd.DataFrame):
 
 def render_closest_collaborators(d: pd.DataFrame):
     """
-    Bagian 5: Grafik Horizontal Bar untuk Pemain Penyumbang Assist Terbanyak.
+    Bagian 8: Grafik Horizontal Bar untuk Pemain Penyumbang Assist Terbanyak.
     """
-    render_section_header("05", "Closest collaborators")
+    render_section_header("08", "Assist Partner Terbaik per Klub")
     
     # Filter out goals where there is no assist record (e.g. Solo/Penalty/Not Applicable)
-    ap = (d[d["assist_player"].str.lower() != "not applicable"]
-            ["assist_player"].value_counts().head(12).reset_index())
-    ap.columns = ["assist_player", "assists"]
+    df_assist = d[d["assist_player"].str.lower() != "not applicable"]
     
-    fig = px.bar(ap, x="assists", y="assist_player", orientation="h",
-                 color="assists", color_continuous_scale=SEQ, text="assists")
-    fig.update_traces(texttemplate="%{text}", textposition="outside",
-                      textfont=dict(color=TEXT, size=11), marker_line_width=0)
-    fig.update_layout(coloraxis_showscale=False, yaxis=dict(autorange="reversed"))
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.plotly_chart(style_fig(fig, 460), use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    if len(df_assist) > 0:
+        # Tentukan 15 assist players terbanyak secara keseluruhan
+        top_assisters = df_assist["assist_player"].value_counts().head(15).index
+        # Saring data hanya untuk assisters tersebut
+        ap_grouped = df_assist[df_assist["assist_player"].isin(top_assisters)]
+        # Group by assist_player dan club
+        ap = ap_grouped.groupby(["assist_player", "club"]).size().reset_index(name="jumlah_assist")
+        
+        # Urutkan agar total assist terbanyak secara keseluruhan berada di atas
+        player_totals = ap.groupby("assist_player")["jumlah_assist"].sum().reset_index().sort_values("jumlah_assist", ascending=False)
+        ap["assist_player"] = pd.Categorical(ap["assist_player"], categories=player_totals["assist_player"], ordered=True)
+        ap = ap.sort_values("assist_player")
+        
+        fig = px.bar(
+            ap, x="jumlah_assist", y="assist_player", orientation="h",
+            color="club",
+            color_discrete_map={
+                "FC Barcelona": "#5C7CFA",
+                "Inter Miami CF": "#FF6B6B",
+                "Paris Saint-Germain": "#20C997",
+                "Argentina": "#22D3EE"
+            },
+            labels={"jumlah_assist": "jumlah_assist", "assist_player": "assist_player"}
+        )
+        fig.update_traces(marker_line_width=0)
+        fig.update_layout(yaxis=dict(autorange="reversed"))
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.plotly_chart(style_fig(fig, 460, showlegend=True), use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.info("No assist data available for the current selection.")
+        st.markdown("</div>", unsafe_allow_html=True)
 
 def render_complete_records_table(d: pd.DataFrame):
     """
-    Bagian 6: Tabel Data Utama yang Menampilkan Seluruh Record Gol secara Interaktif.
+    Bagian 9: Tabel Data Utama yang Menampilkan Seluruh Record Gol secara Interaktif.
     """
-    render_section_header("06", "The complete record")
+    render_section_header("09", "The complete record")
     st.dataframe(
         d[["date","season","club","competition","venue","player_position",
            "goal_minute_bucket","goal_type","assist_player"]]
@@ -574,9 +671,12 @@ def main():
     # 4. Render Layout Dashboard
     render_hero(len(df)) # Tampilkan total gol keseluruhan di Hero
     render_kpis(filtered_df)
-    render_seasons_and_clubs(filtered_df)
-    render_goal_anatomy(filtered_df)
-    render_geography_and_rhythm(filtered_df, len(filtered_df))
+    render_seasons(filtered_df)
+    render_clubs(filtered_df)
+    render_goal_types(filtered_df)
+    render_goal_minutes(filtered_df)
+    render_geography(filtered_df)
+    render_rhythm(filtered_df, len(filtered_df))
     render_season_minute_heatmap(filtered_df)
     render_closest_collaborators(filtered_df)
     render_complete_records_table(filtered_df)
