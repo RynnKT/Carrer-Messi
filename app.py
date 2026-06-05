@@ -8,11 +8,9 @@ import plotly.graph_objects as go
 import streamlit as st
 
 # ==============================================================================
-# 1. PAGE & CONFIGURATION SETUP (PENGATURAN HALAMAN Halaman)
+# PAGE & CONFIGURATION SETUP
 # ==============================================================================
 
-# Mengonfigurasi properti dasar aplikasi web Streamlit.
-# Fungsi ini wajib dipanggil sebagai perintah Streamlit pertama pada script.
 st.set_page_config(
     page_title="Messi · Goals Atlas",
     page_icon="◆",
@@ -21,39 +19,38 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# 2. DESIGN SYSTEM & CONSTANTS (TOKEN DESAIN)
-# Menjaga konsistensi warna, gradien, dan tipografi di seluruh komponen visual.
+# DESIGN SYSTEM & CONSTANTS
 # ==============================================================================
 
-INK        = "#0A0A0F"   # Latar belakang gelap utama (near-black)
-INK_2      = "#11111A"   # Latar belakang gelap sekunder
-SURFACE    = "rgba(255,255,255,0.04)" # Permukaan card semi-transparan (glassmorphism)
-BORDER     = "rgba(255,255,255,0.08)"  # Warna border tipis transparan
-TEXT       = "#F4F4F5"   # Warna teks utama yang terang dan kontras
-MUTED      = "#8A8A99"   # Warna teks sekunder/redup
-ROSE       = "#F43F5E"   # Aksen warna pink/merah (Barcelona)
-AMBER      = "#F59E0B"   # Aksen warna emas/kuning (Golden Ballon d'Or)
-CYAN       = "#22D3EE"   # Aksen warna biru muda (Argentina)
-VIOLET     = "#8B5CF6"
-MINT       = "#34D399"
+INK        = "#0A0A0F"   # Latar belakang utama (near-black)
+INK_2      = "#11111A"   # Latar belakang sekunder, dipakai di sidebar & tooltip
+SURFACE    = "rgba(255,255,255,0.04)"  # Permukaan card; angka = tingkat transparansi
+BORDER     = "rgba(255,255,255,0.08)"  # Garis tepi card; naikkan angka agar lebih terlihat
+TEXT       = "#F4F4F5"   # Warna teks utama
+MUTED      = "#8A8A99"   # Warna teks sekunder (label sumbu, keterangan kecil)
+ROSE       = "#F43F5E"   # Aksen merah/pink — dipakai untuk warna Home & elemen UI utama
+AMBER      = "#F59E0B"   # Aksen kuning/emas — dipakai di teks italic hero header
+CYAN       = "#22D3EE"   # Aksen biru muda — dipakai untuk warna Away di semua grafik
+VIOLET     = "#8B5CF6"   # Ungu (tersedia untuk kategori tambahan)
+MINT       = "#34D399"   # Hijau mint (tersedia untuk kategori tambahan)
 
-# Sekuensial gradien untuk chart Plotly (transisi magenta ke kuning amber premium)
+# Gradien heatmap: urutan warna dari nilai rendah ke tinggi. Ubah hex untuk kustomisasi.
 SEQ        = ["#1E1B2E", "#3B0F4A", "#7C1D6F", "#C2185B", "#F43F5E", "#F59E0B", "#FCD34D"]
+
+# Palet warna donut chart: urutan = kategori terbesar ke terkecil. Tambah jika > 6 kategori.
 CATEGORICAL = ["#F43F5E", "#22D3EE", "#F59E0B", "#8B5CF6", "#34D399", "#F472B6"]
 
-# Font keluarga utama
+# Font utama
 FONT = "Inter, ui-sans-serif, system-ui, sans-serif"
 
 # ==============================================================================
-# 3. HELPER FUNCTIONS & STYLING (FUNGSI PEMBANTU & TAMPILAN)
+# HELPER FUNCTIONS & STYLING
 # ==============================================================================
 
 def inject_global_css():
     """
     Menyuntikkan kode CSS kustom ke dalam Streamlit.
-    Digunakan untuk mendefinisikan latar belakang gradien dinamis pada aplikasi, 
-    gaya kartu kpi dinamis saat di-hover, mask grid bergaya stadium, 
-    serta kustomisasi sidebar dan scrollbar agar bertema premium editorial.
+    Mendefinisikan latar belakang gradien, gaya card, sidebar, dan scrollbar premium.
     """
     st.markdown(f"""
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -293,43 +290,40 @@ def render_section_header(num: str, title: str):
     )
 
 # ==============================================================================
-# 4. DATA PIPELINE (LOADING & CACHING)
+# DATA PIPELINE (LOADING & CACHING)
 # ==============================================================================
 
 @st.cache_data
 def load_data(path: str = "messi_all_goals.xlsx") -> pd.DataFrame:
     """
     Memuat data mentah dari Excel dan melakukan preprocessing.
-    Menggunakan mekanisme cache Streamlit agar data tidak dimuat ulang 
+    Menggunakan mekanisme cache Streamlit agar data tidak dimuat ulang
     setiap kali user mengubah filter widget (meningkatkan performa secara dramatis).
     """
     df = pd.read_excel(path)
     df["date"] = pd.to_datetime(df["date"])
-    
-    # Normalisasi format musim:
-    # Baris data lama memiliki format objek datetime (misal: datetime(2004,5,1) -> musim "2004-05").
-    # Data baru berupa string plain ("2012-13"). Semua disamakan menjadi format "YYYY/YY" dengan "/" 
-    # agar Plotly tidak salah menginterpretasikannya sebagai tipe tanggal berkala (yang mematahkan grafik).
+
+    # Normalisasi format musim ke "YYYY/YY" agar konsisten dan tidak salah dibaca Plotly
     def _parse_season(val):
         if isinstance(val, str):
             return val.replace("-", "/")   # "2012-13" → "2012/13"
         try:
-            return pd.to_datetime(val).strftime("%Y/%m")  # datetime(2004,5,1) → "2004/05"
+            return pd.to_datetime(val).strftime("%Y/%m")  # datetime → "2004/05"
         except Exception:
             return str(val)
-            
+
     df["season"] = df["season"].apply(_parse_season)
-    
+
     # Cast kolom kategori ke string untuk mencegah inkonsistensi tipe data saat plotting
     for c in ("club", "competition", "venue", "goal_type",
               "player_position", "goal_minute_bucket", "assist_player"):
         if c in df.columns:
             df[c] = df[c].astype(str)
-            
+
     return df
 
 # ==============================================================================
-# 5. USER INTERFACE COMPONENTS (MODUL UI/TAMPILAN)
+# USER INTERFACE COMPONENTS (MODUL UI/TAMPILAN)
 # ==============================================================================
 
 def render_sidebar(df: pd.DataFrame) -> pd.DataFrame:
@@ -340,30 +334,26 @@ def render_sidebar(df: pd.DataFrame) -> pd.DataFrame:
         st.markdown("## Filters")
         st.caption("Refine the dataset")
 
-        # Mengambil opsi unik untuk filter pilihan
-        seasons = sorted(df["season"].unique())
-        clubs   = sorted(df["club"].unique())
-        comps   = sorted(df["competition"].unique())
+        seasons    = sorted(df["season"].unique())
+        clubs      = sorted(df["club"].unique())
+        comps      = sorted(df["competition"].unique())
         goal_types = sorted(df["goal_type"].unique())
         positions  = sorted(df["player_position"].unique())
 
-        # Widget pilihan filter interaktif
-        sel_seasons = st.multiselect("Season", seasons, default=seasons)
-        sel_clubs   = st.multiselect("Club", clubs, default=clubs)
-        sel_comps   = st.multiselect("Competition", comps, default=comps)
+        sel_seasons    = st.multiselect("Season", seasons, default=seasons)
+        sel_clubs      = st.multiselect("Club", clubs, default=clubs)
+        sel_comps      = st.multiselect("Competition", comps, default=comps)
         sel_goal_types = st.multiselect("Goal Type", goal_types, default=goal_types)
         sel_positions  = st.multiselect("Player Position", positions, default=positions)
-        sel_venue   = st.radio("Venue", ["All", "Home", "Away"], horizontal=True)
+        sel_venue      = st.radio("Venue", ["All", "Home", "Away"], horizontal=True)
 
         st.markdown("---")
-        # Informasi total dataset mentah
         st.markdown(
             f"<div style='font-family:JetBrains Mono,monospace;font-size:11px;color:{MUTED};letter-spacing:.12em'>"
             f"DATASET · {len(df):,} GOALS<br/>2004 → 2024</div>",
             unsafe_allow_html=True,
         )
 
-    # Melakukan pemotongan baris data berdasarkan filter yang dipilih user
     mask = (
         df["season"].isin(sel_seasons)
         & df["club"].isin(sel_clubs)
@@ -373,12 +363,12 @@ def render_sidebar(df: pd.DataFrame) -> pd.DataFrame:
     )
     if sel_venue != "All":
         mask &= df["venue"] == sel_venue
-        
+
     return df[mask].copy()
 
 def render_hero(total_goals: int):
     """
-    Merender Hero Header Section (banner atas) yang menyapa pengguna dengan ringkasan deskripsi.
+    Merender Hero Header Section (banner atas).
     """
     st.markdown(f"""
     <div class="hero">
@@ -403,7 +393,6 @@ def render_kpis(d: pd.DataFrame):
     home_share = (d["venue"].eq("Home").mean() * 100) if total else 0
 
     c1, c2, c3, c4 = st.columns(4)
-    # Merender setiap card KPI menggunakan blok kode HTML div kustom
     for col, label, value, sub in [
         (c1, "Total Goals",     f"{total:,}",          "filtered dataset"),
         (c2, "Active Seasons",  f"{seasons_active}",   "across the timeline"),
@@ -418,20 +407,23 @@ def render_kpis(d: pd.DataFrame):
                 unsafe_allow_html=True,
             )
 
+# ------------------------------------------------------------------------------
+# GRAFIK §01 — Line Chart: Tren Gol per Musim
+# Warna garis per klub → ubah hex di color_discrete_map di bawah
+# Bentuk garis        → line_shape: "spline" (melengkung) atau "linear" (lurus)
+# Ukuran titik        → marker=dict(size=6), ubah angka 6
+# Tinggi grafik       → style_fig(fig, 360, ...), ubah angka 360
+# ------------------------------------------------------------------------------
 def render_seasons(d: pd.DataFrame):
-    """
-    Bagian 1: Visualisasi Tren Gol per Musim (Line Spline Chart).
-    """
     render_section_header("01", "Goals across the seasons")
-    # Menghitung agregat gol per musim dan klub untuk grafik deret waktu
     s = d.groupby(["season", "club"]).size().reset_index(name="goals").sort_values("season")
     fig = px.line(
         s, x="season", y="goals", color="club", line_shape="spline",
         color_discrete_map={
-            "FC Barcelona": "#5C7CFA",
-            "Inter Miami CF": "#FF6B6B",
-            "Paris Saint-Germain": "#20C997",
-            "Argentina": "#22D3EE"
+            "FC Barcelona":        "#5C7CFA",  # ganti hex untuk ubah warna garis Barcelona
+            "Inter Miami CF":      "#FF6B6B",  # ganti hex untuk ubah warna garis Inter Miami
+            "Paris Saint-Germain": "#20C997",  # ganti hex untuk ubah warna garis PSG
+            "Argentina":           "#22D3EE",  # ganti hex untuk ubah warna garis Argentina
         }
     )
     fig.update_traces(mode="lines+markers", marker=dict(size=6))
@@ -439,14 +431,15 @@ def render_seasons(d: pd.DataFrame):
     st.plotly_chart(style_fig(fig, 360, showlegend=True), use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
+# ------------------------------------------------------------------------------
+# GRAFIK §02 — Horizontal Bar: Gol per Klub (Home vs Away)
+# Warna batang → Home: variabel ROSE | Away: variabel CYAN (ubah di bagian atas)
+# Posisi angka → textposition: "outside" (di luar) atau "inside" (di dalam batang)
+# Tinggi grafik → style_fig(fig, 360, ...), ubah angka 360
+# ------------------------------------------------------------------------------
 def render_clubs(d: pd.DataFrame):
-    """
-    Bagian 2: Distribusi Gol berdasarkan Klub (Horizontal Bar Chart).
-    """
     render_section_header("02", "Goals by club")
-    # Menghitung jumlah gol untuk setiap klub yang dibela, dikelompokkan berdasarkan venue
     cl = d.groupby(["club", "venue"]).size().reset_index(name="goals")
-    # Urutkan agar klub dengan gol terbanyak muncul di atas (FC Barcelona)
     club_totals = cl.groupby("club")["goals"].sum().reset_index().sort_values("goals", ascending=False)
     cl["club"] = pd.Categorical(cl["club"], categories=club_totals["club"], ordered=True)
     cl = cl.sort_values("club")
@@ -454,30 +447,32 @@ def render_clubs(d: pd.DataFrame):
     fig = px.bar(
         cl, x="goals", y="club", orientation="h",
         color="venue",
-        color_discrete_map={"Home": ROSE, "Away": CYAN},
+        color_discrete_map={"Home": ROSE, "Away": CYAN},  # ubah ROSE/CYAN di bagian atas file
         text="goals"
     )
-    fig.update_traces(texttemplate="%{text}", textposition="outside",
-                      textfont=dict(color=TEXT, size=11),
-                      marker_line_width=0)
+    fig.update_traces(
+        texttemplate="%{text}",
+        textposition="outside",          # "outside"=angka di luar | "inside"=di dalam batang
+        textfont=dict(color=TEXT, size=11),
+        marker_line_width=0
+    )
     fig.update_layout(yaxis=dict(autorange="reversed"))
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.plotly_chart(style_fig(fig, 360, showlegend=True), use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
+# ------------------------------------------------------------------------------
+# GRAFIK §03 — Horizontal Bar: Distribusi Tipe Gol per Klub
+# Jumlah tipe gol    → .head(8), ubah angka 8 untuk tampilkan lebih/kurang
+# Warna batang       → ubah hex di color_discrete_map di bawah
+# Tinggi grafik      → style_fig(fig, 380, ...), ubah angka 380
+# ------------------------------------------------------------------------------
 def render_goal_types(d: pd.DataFrame):
-    """
-    Bagian 3: Visualisasi Metode Pencetakan Gol (Tipe Gol).
-    """
     render_section_header("03", "Goal type distribution")
-    # Tentukan 8 tipe gol terbanyak secara keseluruhan
-    top_types = d["goal_type"].value_counts().head(8).index
-    # Saring data hanya untuk tipe gol tersebut
+    top_types  = d["goal_type"].value_counts().head(8).index  # ubah 8 untuk lebih/kurang tipe
     gt_filtered = d[d["goal_type"].isin(top_types)]
-    # Group by goal_type dan club
     gt = gt_filtered.groupby(["goal_type", "club"]).size().reset_index(name="count")
-    
-    # Urutkan tipe gol agar total terbanyak ada di atas
+
     type_totals = gt.groupby("goal_type")["count"].sum().reset_index().sort_values("count", ascending=False)
     gt["goal_type"] = pd.Categorical(gt["goal_type"], categories=type_totals["goal_type"], ordered=True)
     gt = gt.sort_values("goal_type")
@@ -486,134 +481,181 @@ def render_goal_types(d: pd.DataFrame):
         gt, x="count", y="goal_type", orientation="h",
         color="club",
         color_discrete_map={
-            "FC Barcelona": "#5C7CFA",
-            "Inter Miami CF": "#FF6B6B",
-            "Paris Saint-Germain": "#20C997",
-            "Argentina": "#22D3EE"
+            "FC Barcelona":        "#5C7CFA",  # ganti hex untuk ubah warna Barcelona
+            "Inter Miami CF":      "#FF6B6B",  # ganti hex untuk ubah warna Inter Miami
+            "Paris Saint-Germain": "#20C997",  # ganti hex untuk ubah warna PSG
+            "Argentina":           "#22D3EE",  # ganti hex untuk ubah warna Argentina
         },
         text="count"
     )
-    fig.update_traces(texttemplate="%{text}", textposition="outside",
-                      textfont=dict(color=TEXT, size=11), marker_line_width=0)
+    fig.update_traces(
+        texttemplate="%{text}",
+        textposition="outside",
+        textfont=dict(color=TEXT, size=11),
+        marker_line_width=0
+    )
     fig.update_layout(yaxis=dict(autorange="reversed"))
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.plotly_chart(style_fig(fig, 380, showlegend=True), use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
+# ------------------------------------------------------------------------------
+# GRAFIK §04 — Vertical Bar: Gol per Rentang Menit (Home vs Away)
+# Urutan interval    → list bucket_order di bawah, ubah urutan untuk mengubah tampilan
+# Warna batang       → Home: ROSE | Away: CYAN (ubah variabel di bagian atas file)
+# Tinggi grafik      → style_fig(fig, 380, ...), ubah angka 380
+# ------------------------------------------------------------------------------
 def render_goal_minutes(d: pd.DataFrame):
-    """
-    Bagian 4: Visualisasi Rentang Waktu (Minute Buckets).
-    """
     render_section_header("04", "Goal timing / minute bucket")
-    # Pengelompokan menit gol berdasarkan interval 15 menit dan venue
     mb = d.groupby(["goal_minute_bucket", "venue"]).size().reset_index(name="count")
-    bucket_order = ["0-15","16-30","31-45","46-60","61-75","76-90","91+"]
+    bucket_order = ["0-15","16-30","31-45","46-60","61-75","76-90","91+"]  # ubah urutan jika perlu
     mb["goal_minute_bucket"] = pd.Categorical(mb["goal_minute_bucket"], categories=bucket_order, ordered=True)
     mb = mb.sort_values("goal_minute_bucket")
 
     fig = px.bar(
         mb, x="goal_minute_bucket", y="count",
         color="venue",
-        color_discrete_map={"Home": ROSE, "Away": CYAN},
+        color_discrete_map={"Home": ROSE, "Away": CYAN},  # ubah ROSE/CYAN di bagian atas file
         text="count"
     )
-    fig.update_traces(texttemplate="%{text}", textposition="outside",
-                      textfont=dict(color=TEXT, size=11), marker_line_width=0)
+    fig.update_traces(
+        texttemplate="%{text}",
+        textposition="outside",
+        textfont=dict(color=TEXT, size=11),
+        marker_line_width=0
+    )
     fig.update_layout(coloraxis_showscale=False)
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.plotly_chart(style_fig(fig, 380, showlegend=True), use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
+# ------------------------------------------------------------------------------
+# GRAFIK §05 — Grouped Bar: Perbandingan Home vs Away per Musim
+# Mode batang   → barmode: "group" (berdampingan) atau "stack" (ditumpuk)
+# Warna batang  → Home: ROSE | Away: CYAN (ubah variabel di bagian atas file)
+# Tinggi grafik → style_fig(fig, 360, ...), ubah angka 360
+# ------------------------------------------------------------------------------
 def render_geography(d: pd.DataFrame):
-    """
-    Bagian 5: Visualisasi Distribusi Laga Home/Away per Musim.
-    """
     render_section_header("05", "Venue comparison (Home vs Away)")
-    # Pembagian gol kandang (Home) vs tandang (Away) per musim
     ven = d.groupby(["season", "venue"]).size().reset_index(name="goals")
-    fig = px.bar(ven, x="season", y="goals", color="venue", barmode="group",
-                 color_discrete_map={"Home": ROSE, "Away": CYAN})
+    fig = px.bar(
+        ven, x="season", y="goals",
+        color="venue",
+        barmode="group",  # "group"=berdampingan | "stack"=ditumpuk
+        color_discrete_map={"Home": ROSE, "Away": CYAN}  # ubah ROSE/CYAN di bagian atas file
+    )
     fig.update_traces(marker_line_width=0)
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.plotly_chart(style_fig(fig, 360, showlegend=True), use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
+# ------------------------------------------------------------------------------
+# GRAFIK §06 — Donut Chart: Proporsi Posisi Bermain Messi
+# Warna irisan    → list CATEGORICAL di bagian atas file, urutan = terbesar ke terkecil
+# Ukuran lubang   → hole=0.65 (0=pie biasa, 1=hilang); mis: 0.5 lebih kecil, 0.8 lebih besar
+# Teks di irisan  → textinfo: "label+percent" | opsi: "label", "percent", "value"
+# Ukuran angka tengah → size=22 di add_annotation, ubah untuk lebih besar/kecil
+# Tinggi grafik   → style_fig(fig, 360, ...), ubah angka 360
+# ------------------------------------------------------------------------------
 def render_rhythm(d: pd.DataFrame, total_goals_filtered: int):
-    """
-    Bagian 6: Proporsi Posisi Bermain Messi.
-    """
     render_section_header("06", "Goals by player position")
-    # Donut Chart untuk persentase gol berdasarkan posisi pemain di lapangan
     pos = d["player_position"].value_counts().reset_index()
     pos.columns = ["position", "goals"]
+
     fig = go.Figure(go.Pie(
-        labels=pos["position"], values=pos["goals"], hole=0.65,
-        marker=dict(colors=CATEGORICAL, line=dict(color=INK, width=2)),
-        textinfo="label+percent", textfont=dict(color=TEXT, family=FONT, size=12),
+        labels=pos["position"],
+        values=pos["goals"],
+        hole=0.65,  # ukuran lubang tengah: 0=pie biasa, 0.65=donut standar
+        marker=dict(
+            colors=CATEGORICAL,                # ubah list CATEGORICAL di bagian atas untuk ganti warna
+            line=dict(color=INK, width=2)      # garis pemisah antar irisan
+        ),
+        textinfo="label+percent",              # teks di irisan: "label", "percent", atau keduanya
+        textfont=dict(color=TEXT, family=FONT, size=12),
         hovertemplate="<b>%{label}</b><br>%{value} goals (%{percent})<extra></extra>",
     ))
-    # Menambahkan angka statistik di pusat lubang Donut Chart
-    fig.add_annotation(text=f"<b>{total_goals_filtered}</b><br><span style='font-size:11px;color:{MUTED}'>goals</span>",
-                       showarrow=False, font=dict(color=TEXT, family=FONT, size=22))
+    fig.add_annotation(
+        text=f"<b>{total_goals_filtered}</b><br><span style='font-size:11px;color:{MUTED}'>goals</span>",
+        showarrow=False,
+        font=dict(color=TEXT, family=FONT, size=22)  # size=22: ukuran angka di tengah donut
+    )
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.plotly_chart(style_fig(fig, 360, showlegend=False), use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
+# ------------------------------------------------------------------------------
+# GRAFIK §07 — Heatmap: Kerapatan Gol (Musim × Menit)
+# Gradien warna → colorscale di bawah: format [posisi 0–1, "#hex"]
+#                 0=nilai terendah (gelap), 1=nilai tertinggi (terang)
+# Angka di kotak → textfont size=11 (ubah angka); color="white" (ubah untuk warna lain)
+# Tinggi grafik  → style_fig(fig, 460), ubah angka 460
+# ------------------------------------------------------------------------------
 def render_season_minute_heatmap(d: pd.DataFrame):
-    """
-    Bagian 7: Heatmap Kerapatan Gol berdasarkan Persilangan Musim x Menit Pertandingan.
-    """
     render_section_header("07", "The heatmap — season × minute")
-    
-    # Pivot tabel gol untuk mendistribusikan jumlah gol ke baris Musim dan kolom Menit
+
     hm = (d.groupby(["season", "goal_minute_bucket"]).size()
             .reset_index(name="goals")
             .pivot(index="season", columns="goal_minute_bucket", values="goals")
             .reindex(columns=["0-15","16-30","31-45","46-60","61-75","76-90","91+"])
             .fillna(0))
-            
+
+    import numpy as np
+    text_vals = np.where(hm.values == 0, "", hm.values.astype(int).astype(str))
+
     fig = go.Figure(go.Heatmap(
-        z=hm.values, x=hm.columns, y=hm.index,
-        colorscale=[[0, "#0F0A18"], [0.25, "#3B0F4A"], [0.5, "#7C1D6F"],
-                    [0.75, "#F43F5E"], [1, "#F59E0B"]],
+        z=hm.values,
+        x=hm.columns,
+        y=hm.index,
+        colorscale=[           # gradien warna: [posisi, "#hex"] — ubah hex untuk kustomisasi
+            [0,    "#0F0A18"], # nilai terendah (gelap)
+            [0.25, "#3B0F4A"],
+            [0.5,  "#7C1D6F"], # nilai tengah
+            [0.75, "#F43F5E"],
+            [1,    "#F59E0B"], # nilai tertinggi (terang, kuning emas)
+        ],
         hovertemplate="<b>%{y}</b> · %{x}<br>%{z} goals<extra></extra>",
-        colorbar=dict(thickness=10, tickfont=dict(color=MUTED, size=10),
-                      outlinewidth=0, len=0.7),
+        colorbar=dict(
+            thickness=10,
+            tickfont=dict(color=MUTED, size=10),
+            outlinewidth=0,
+            len=0.7            # panjang colorbar (0–1); 0.7 = 70% tinggi grafik
+        ),
+        text=text_vals,
+        texttemplate="%{text}",
+        textfont=dict(color="white", size=11, family=FONT),  # ubah size untuk angka lebih besar
     ))
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.plotly_chart(style_fig(fig, 460), use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
+# ------------------------------------------------------------------------------
+# GRAFIK §08 — Horizontal Bar: Top Pemberi Assist per Klub
+# Jumlah pemain  → .head(15), ubah angka 15 untuk tampilkan lebih/kurang pemain
+# Warna batang   → ubah hex di color_discrete_map di bawah
+# Tinggi grafik  → style_fig(fig, 460, ...), ubah angka 460
+# ------------------------------------------------------------------------------
 def render_closest_collaborators(d: pd.DataFrame):
-    """
-    Bagian 8: Grafik Horizontal Bar untuk Pemain Penyumbang Assist Terbanyak.
-    """
     render_section_header("08", "Assist Partner Terbaik per Klub")
-    
-    # Filter out goals where there is no assist record (e.g. Solo/Penalty/Not Applicable)
+
     df_assist = d[d["assist_player"].str.lower() != "not applicable"]
-    
+
     if len(df_assist) > 0:
-        # Tentukan 15 assist players terbanyak secara keseluruhan
-        top_assisters = df_assist["assist_player"].value_counts().head(15).index
-        # Saring data hanya untuk assisters tersebut
+        top_assisters = df_assist["assist_player"].value_counts().head(15).index  # ubah 15 untuk lebih/kurang
         ap_grouped = df_assist[df_assist["assist_player"].isin(top_assisters)]
-        # Group by assist_player dan club
         ap = ap_grouped.groupby(["assist_player", "club"]).size().reset_index(name="jumlah_assist")
-        
-        # Urutkan agar total assist terbanyak secara keseluruhan berada di atas
+
         player_totals = ap.groupby("assist_player")["jumlah_assist"].sum().reset_index().sort_values("jumlah_assist", ascending=False)
         ap["assist_player"] = pd.Categorical(ap["assist_player"], categories=player_totals["assist_player"], ordered=True)
         ap = ap.sort_values("assist_player")
-        
+
         fig = px.bar(
             ap, x="jumlah_assist", y="assist_player", orientation="h",
             color="club",
             color_discrete_map={
-                "FC Barcelona": "#5C7CFA",
-                "Inter Miami CF": "#FF6B6B",
-                "Paris Saint-Germain": "#20C997",
-                "Argentina": "#22D3EE"
+                "FC Barcelona":        "#5C7CFA",  # ganti hex untuk ubah warna Barcelona
+                "Inter Miami CF":      "#FF6B6B",  # ganti hex untuk ubah warna Inter Miami
+                "Paris Saint-Germain": "#20C997",  # ganti hex untuk ubah warna PSG
+                "Argentina":           "#22D3EE",  # ganti hex untuk ubah warna Argentina
             },
             labels={"jumlah_assist": "jumlah_assist", "assist_player": "assist_player"}
         )
@@ -659,17 +701,11 @@ def main():
     """
     Alur eksekusi terstruktur aplikasi dashboard.
     """
-    # 1. Suntikkan CSS kustom
     inject_global_css()
-    
-    # 2. Muat dataset ter-caching
     df = load_data()
-    
-    # 3. Render sidebar dan dapatkan data terfilter
     filtered_df = render_sidebar(df)
-    
-    # 4. Render Layout Dashboard
-    render_hero(len(df)) # Tampilkan total gol keseluruhan di Hero
+
+    render_hero(len(df))
     render_kpis(filtered_df)
     render_seasons(filtered_df)
     render_clubs(filtered_df)
